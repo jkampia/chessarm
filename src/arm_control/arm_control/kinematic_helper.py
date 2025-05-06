@@ -6,6 +6,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+from .chessarm_colors import COLOR_RGB, pickRandomColor
+
 np.set_printoptions(suppress=True, precision=2)
 
 class ARM_5DOF:
@@ -18,7 +20,9 @@ class ARM_5DOF:
         
         self.joint_params = joint_params
         self.joint_angles = init_angles
-        self.joint_coordinates = [[0.0, 0.0, 0.0], [], [], [], [], []]
+        self.joint_coordinates = [[0.0, 0.0, 0.0], [], [], [], [], []] # default mm
+        self.joint_coordinates_m = [[0.0, 0.0, 0.0], [], [], [], [], []] # non default m
+        self.joint_colors = [COLOR_RGB["red"], COLOR_RGB["green"], COLOR_RGB["blue"], COLOR_RGB["orange"], COLOR_RGB["purple"], COLOR_RGB["cyan"]]
 
         self.dh_params = {}
         self.dh_params["alpha"] = [m.pi/2, 0.0, 0.0, m.pi/2, 0.0]
@@ -86,24 +90,30 @@ class ARM_5DOF:
                          [0.0, 0.0, 0.0, 1.0]])
 
 
-    def solveFK(self, joint_angs):
+    def solveFK(self):
 
         # set 'theta' field of dh matrix
-        self.dh_params["theta"] = joint_angs
+        self.dh_params["theta"] = self.joint_angles
         
         # generate tf matrices
         product = self.tfMatrix(0)
         self.joint_coordinates[1] = self.extractCoordinates(product)
+        self.joint_coordinates_m[1] = self.extractCoordinates_m(product) 
         for i in range(1, 5):
             product = np.matmul(product, self.tfMatrix(i))
             self.joint_coordinates[i+1] = self.extractCoordinates(product)
+            self.joint_coordinates_m[i+1] = self.extractCoordinates_m(product) 
         
-        self.printMatrixPretty(self.joint_coordinates)
+        #self.printMatrixPretty(self.joint_coordinates_m)
 
 
     def extractCoordinates(self, tf_mat):
         # extract x, y, z position of a particular joint given its T0i tf matrix      
         return [tf_mat[0][3], tf_mat[1][3], tf_mat[2][3]]
+    
+    def extractCoordinates_m(self, tf_mat):
+        # extract x, y, z position of a particular joint given its T0i tf matrix      
+        return [tf_mat[0][3] / 1000.0, tf_mat[1][3] / 1000.0, tf_mat[2][3] / 1000.0]
     
 
     def plotArm3D(self, joint_positions):
@@ -139,11 +149,11 @@ class ARM_5DOF:
 
 
 
-joint_params = [10, 10, 10, 10, 10]
-target_pose = [10, 10, 10, -m.pi/2, 0]
+#joint_params = [10, 10, 10, 10, 10]
+#target_pose = [10, 10, 10, -m.pi/2, 0]
 
-robot = ARM_5DOF(joint_params)
-robot.solveFK([m.pi/4, m.pi/2, 0, 0, 0])
+#robot = ARM_5DOF(joint_params)
+#robot.solveFK([m.pi/4, m.pi/2, 0, 0, 0])
 #print(robot.solveIK(target_pose))
 
-robot.plotArm3D(robot.joint_coordinates)
+#robot.plotArm3D(robot.joint_coordinates)
