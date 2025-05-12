@@ -1,6 +1,12 @@
 import rclpy
 from rclpy.node import Node
 
+import threading
+
+import time
+
+import math as m
+
 from std_msgs.msg import Header, String
 
 from sensor_msgs.msg import Image, PointCloud2, PointField
@@ -29,25 +35,53 @@ class MainArmNode(Node):
     def __init__(self):    
 
         super().__init__('main_arm_node')
-        self.timer = self.create_timer(0.1, self.timerCallback)
-        self.get_logger().info("Main control node initialized")
 
-        self.robot = ARM_5DOF([100, 400, 400, 100, 100], [0.0, 0.0, 0.0, 0.0, 0.0])
+        self.timer = self.create_timer(0.1, self.timerCallback) # start ros2 timer
 
+        self.user_command = 1 # initialize user_command to a non-None value
+        self.user_input_thread = threading.Thread(target=self.userInputThread, daemon=True) # start separate user input thread
+        self.user_input_thread.start()
+
+        self.home_angles = [0.0, m.pi/2, 0.0, 0.0, 0.0] # home angles for each joint
+        self.robot = ARM_5DOF([200, 400, 400, 100, 100], self.home_angles) # init robot
+
+        # ros2 pubs and subs
         self.joint_pub = self.create_publisher(PointCloud2, '/chessarm/out/joint_coordinates', 10)
         self.link_pub = self.create_publisher(Path, '/chessarm/out/link_coordinates', 10)
 
         self.broadcaster = StaticTransformBroadcaster(self)
         self.publishStaticTF()
 
+        # confirm node initialization after all steps complete
+        print("Main control node initialized")
+
+        # set user_command to None to start the user input loop
+        self.user_command = None
+
+        self.animation_triggers = {} # set of timestamps to trigger animation frames
+
 
     def timerCallback(self):
 
-        
-        self.parseUserInput(self.getUserInput())
+        if self.user_command:
+            self.parseUserInput(self.user_command)
+            self.user_command = None
 
+        #self.processAnimationTriggers()
         self.robot.solveFK()
         self.publishJointsToRviz()
+
+
+    def userInputThread(self):
+        time.sleep(0.1) # small delay to allow node to initialize
+        while rclpy.ok():
+            # wait until after command is parsed to ask for a new one
+            if self.user_command is None:
+                try:
+                    user_input = input("Enter command: ")
+                    self.user_command = user_input
+                except EOFError:
+                    break
 
 
     def publishJointsToRviz(self):
@@ -73,7 +107,7 @@ class MainArmNode(Node):
 
         # restructure points to be x,y,z,rgb (packed)
         for i in range(len(points)):
-            print(colors[i]) # [color name, (r,g,b)]
+            #print(colors[i]) # [color name, (r,g,b)]
             r, g, b = colors[i]
             points[i] = (points[i][0], points[i][1], points[i][2], self.packRGB(r, g, b))
 
@@ -117,21 +151,52 @@ class MainArmNode(Node):
         t.transform.rotation.y = 0.0
         t.transform.rotation.z = 0.0
         t.transform.rotation.w = 1.0
-
-        self.broadcaster.sendTransform(t)
+        self.broadcaster.sendTransform(t)  
         self.get_logger().info('Published static transform: map -> map')
 
-    def getUserInput(self): 
-        return input("Enter a command: ")
+
+    def currentTimeMilliseconds(self):
+        return int(round(time.time() * 1000))
+
+
+    # generate animation 'frames' struct of: [time, [joint_angles]]
+    def generateAnimationFrames(self, init_angles, target_angles, fps=10, move_time=1.0):
+        num_steps = int(move_time * fps)
+        frames = []
+        for i in range(num_steps):
+            angles = [(1 - i / num_steps) * init + (i / num_steps) * target for init, target in zip(init_angles, target_angles)]
+            frames.append((self.currentTimeMilliseconds() + i * int(1000/fps), angles))
+        return frames
+    
+
+    def processAnimationTriggers(self):
+        for key, frames in self.animation_triggers.items():
+            if frames is None:
+                continue
+            elif key == "fk" and self.currentTimeMilliseconds() > frames[0][0]:
+                self.robot.joint_angles = frames[0][1]
+                frames.pop(0) # pop the frame that was just processed
+
 
     def parseUserInput(self, user_input):
-        if user_input.startswith("help"):
+        list = user_input.split()
+        if list[0] == "help":
             for command in command_list:
                 print(command)
-        elif user_input.startswith("ik"):
+        elif list[0] == "home":
+            self.robot.joint_angles = self.home_angles.copy()
+        elif list[0] == "ik":
             pass
-        elif user_input.startswith("fk"):
-            pass
+        elif list[0] == "fk":
+            if len(list) != 3:
+                print("Invalid command. Usage: fk <joint> <angle>")
+                return
+            joint = int(list[1]) - 1
+            new_angle = m.radians(float(list[2]))
+            #angle_list = self.robot.joint_angles
+            #angle_list[joint] = new_angle
+            #self.animation_triggers["fk"] = self.generateAnimationFrames(self.robot.joint_angles, angle_list)
+            self.robot.joint_angles[joint] = new_angle
 
 
 

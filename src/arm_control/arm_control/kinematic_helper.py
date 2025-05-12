@@ -19,7 +19,7 @@ class ARM_5DOF:
             raise Exception("Please provide all (5) limb lengths")
         
         self.joint_params = joint_params
-        self.joint_angles = init_angles
+        self.joint_angles = init_angles.copy()
         self.joint_coordinates = [[0.0, 0.0, 0.0], [], [], [], [], []] # default mm
         self.joint_coordinates_m = [[0.0, 0.0, 0.0], [], [], [], [], []] # non default m
         self.joint_colors = [COLOR_RGB["red"], COLOR_RGB["green"], COLOR_RGB["blue"], COLOR_RGB["orange"], COLOR_RGB["purple"], COLOR_RGB["cyan"]]
@@ -111,49 +111,8 @@ class ARM_5DOF:
         # extract x, y, z position of a particular joint given its T0i tf matrix      
         return [tf_mat[0][3], tf_mat[1][3], tf_mat[2][3]]
     
+
     def extractCoordinates_m(self, tf_mat):
         # extract x, y, z position of a particular joint given its T0i tf matrix      
         return [tf_mat[0][3] / 1000.0, tf_mat[1][3] / 1000.0, tf_mat[2][3] / 1000.0]
-    
 
-    def plotArm3D(self, joint_positions):
-        
-        joint_positions = np.array(joint_positions)
-        # we expect 6 elements: 5 joints and the end effector
-        assert joint_positions.shape == (6, 3), "Expected 6 joint positions, each with 3 coordinates"
-
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
-
-        # plot joints & end effector (circles with different colors)
-        colors = ['red', 'green', 'blue', 'orange', 'purple', 'cyan']
-        for i, pos in enumerate(joint_positions):
-            plt_label = f'Joint {i+1}' 
-            if i == 5:
-                plt_label = "End effector"
-            ax.scatter(pos[0], pos[1], pos[2], color=colors[i], s=100, label=plt_label)
-
-        # Plot links (black lines between consecutive joints)
-        ax.plot(joint_positions[:, 0], joint_positions[:, 1], joint_positions[:, 2], color='black', linewidth=2)
-
-        # Labeling and aesthetics
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.set_zlabel("Z")
-        ax.set_title("3D Robot Arm")
-        ax.legend()
-        ax.grid(True)
-        plt.tight_layout()
-        plt.show()
-
-
-
-
-#joint_params = [10, 10, 10, 10, 10]
-#target_pose = [10, 10, 10, -m.pi/2, 0]
-
-#robot = ARM_5DOF(joint_params)
-#robot.solveFK([m.pi/4, m.pi/2, 0, 0, 0])
-#print(robot.solveIK(target_pose))
-
-#robot.plotArm3D(robot.joint_coordinates)
