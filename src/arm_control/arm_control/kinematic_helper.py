@@ -90,22 +90,53 @@ class ARM_5DOF:
                          [0.0, 0.0, 0.0, 1.0]])
 
 
-    def solveFK(self):
+    def solveFK(self, joint_angles):
 
         # set 'theta' field of dh matrix
-        self.dh_params["theta"] = self.joint_angles
+        self.dh_params["theta"] = joint_angles
+        joint_coordinates = []
         
         # generate tf matrices
         product = self.tfMatrix(0)
-        self.joint_coordinates[1] = self.extractCoordinates(product)
-        self.joint_coordinates_m[1] = self.extractCoordinates_m(product) 
+        joint_coordinates[1] = self.extractCoordinaates(product)
         for i in range(1, 5):
             product = np.matmul(product, self.tfMatrix(i))
-            self.joint_coordinates[i+1] = self.extractCoordinates(product)
-            self.joint_coordinates_m[i+1] = self.extractCoordinates_m(product) 
+            joint_coordinates[i+1] = self.extractCoordinates(product) 
         
         #self.printMatrixPretty(self.joint_coordinates_m)
+        return joint_coordinates
 
+
+    def computeJacobian(self, joint_angles, delta=1e-6):
+        J = np.zeros((3, 3))
+        f0 = self.solveFK(joint_angles)[4]
+        for i in range(3):
+            t = joint_angles.copy()
+            t[i] += delta
+            fi = self.solveFK(t)[4]
+            J[:, i] = (fi - f0) / delta
+        return J
+    
+
+    def gradientDescentIK(self, joint_angles, p_des, alpha=0.01, max_iter=1000, tol=1e-4):
+        
+        pose = np.array(joint_angles[:3], dtype=float)
+
+        for i in range(max_iter):
+            p_cur = self.solveFK(pose)
+            p_cur = np.array(p_cur[4], dtype=float) # extract end effector xyz position (FK returns all joint positions)
+            error = p_cur - p_des
+            loss = m.sqrt(np.sum(error**2)) # euclidean distance
+            if loss < tol:
+                break
+
+            J = self.computeJacobian(pose)
+            gradient = 2 * J.T @ error
+            pose -= alpha * gradient
+            print(pose)
+
+        return pose
+            
 
     def extractCoordinates(self, tf_mat):
         # extract x, y, z position of a particular joint given its T0i tf matrix      

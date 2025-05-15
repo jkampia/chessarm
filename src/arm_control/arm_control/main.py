@@ -68,7 +68,8 @@ class MainArmNode(Node):
             self.user_command = None
 
         #self.processAnimationTriggers()
-        self.robot.solveFK()
+        self.robot.joint_coordinates = self.robot.solveFK(self.robot.joint_angles)
+        self.robot.joint_coordinates_m = [[coord/1000 for coord in joint] for joint in self.robot.joint_coordinates]
         self.publishJointsToRviz()
 
 
@@ -186,7 +187,15 @@ class MainArmNode(Node):
         elif list[0] == "home":
             self.robot.joint_angles = self.home_angles.copy()
         elif list[0] == "ik":
-            pass
+            if len(list) < 4 or len(list) > 6:
+                print("Invalid command. Usage: ik <x> <y> <z> <r> <p>")
+                return
+            x = float(list[1])
+            y = float(list[2])
+            z = float(list[3])
+            r = float(list[4]) if len(list) == 5 else 0.0
+            p = float(list[5]) if len(list) == 6 else 0.0
+            self.robot.joint_angles = self.robot.gradientDescentIK(self.robot.joint_angles, [x, y, z], alpha=0.01, max_iter=1000)
         elif list[0] == "fk":
             if len(list) != 3:
                 print("Invalid command. Usage: fk <joint> <angle>")
