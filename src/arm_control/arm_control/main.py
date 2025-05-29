@@ -26,7 +26,7 @@ import struct
 from geometry_msgs.msg import TransformStamped
 from tf2_ros.static_transform_broadcaster import StaticTransformBroadcaster
 
-from .user_input import command_list
+from .user_input import UserInputHandler
 
 
 class MainArmNode(Node):
@@ -42,8 +42,9 @@ class MainArmNode(Node):
         self.user_input_thread = threading.Thread(target=self.userInputThread, daemon=True) # start separate user input thread
         self.user_input_thread.start()
 
-        self.home_angles = [0.0, m.pi/2, 0.0, 0.0, 0.0] # home angles for each joint
-        self.robot = ARM_5DOF([200, 400, 400, 100, 100], self.home_angles) # init robot
+        home_angles = [0.0, m.pi/2, 0.0, 0.0, 0.0] # home angles for each joint
+        self.robot = ARM_5DOF([200, 400, 400, 100, 100], home_angles) # init robot
+        self.input_handler = UserInputHandler(self.robot) # init user input handler
 
         # ros2 pubs and subs
         self.joint_pub = self.create_publisher(PointCloud2, '/chessarm/out/joint_coordinates', 10)
@@ -64,7 +65,7 @@ class MainArmNode(Node):
     def timerCallback(self):
 
         if self.user_command:
-            self.parseUserInput(self.user_command)
+            self.input_handler.parseUserInput(self.user_command)
             self.user_command = None
 
         #self.processAnimationTriggers()
@@ -177,35 +178,6 @@ class MainArmNode(Node):
             elif key == "fk" and self.currentTimeMilliseconds() > frames[0][0]:
                 self.robot.joint_angles = frames[0][1]
                 frames.pop(0) # pop the frame that was just processed
-
-
-    def parseUserInput(self, user_input):
-        list = user_input.split()
-        if list[0] == "help":
-            for command in command_list:
-                print(command)
-        elif list[0] == "home":
-            self.robot.joint_angles = self.home_angles.copy()
-        elif list[0] == "ik":
-            if len(list) < 4 or len(list) > 6:
-                print("Invalid command. Usage: ik <x> <y> <z> <r> <p>")
-                return
-            x = float(list[1])
-            y = float(list[2])
-            z = float(list[3])
-            r = float(list[4]) if len(list) == 5 else 0.0
-            p = float(list[5]) if len(list) == 6 else 0.0
-            self.robot.joint_angles = self.robot.gradientDescentIK(self.robot.joint_angles, [x, y, z], alpha=0.01, max_iter=1000)
-        elif list[0] == "fk":
-            if len(list) != 3:
-                print("Invalid command. Usage: fk <joint> <angle>")
-                return
-            joint = int(list[1]) - 1
-            new_angle = m.radians(float(list[2]))
-            #angle_list = self.robot.joint_angles
-            #angle_list[joint] = new_angle
-            #self.animation_triggers["fk"] = self.generateAnimationFrames(self.robot.joint_angles, angle_list)
-            self.robot.joint_angles[joint] = new_angle
 
 
 

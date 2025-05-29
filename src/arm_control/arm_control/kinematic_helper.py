@@ -19,6 +19,7 @@ class ARM_5DOF:
             raise Exception("Please provide all (5) limb lengths")
         
         self.joint_params = joint_params
+        self.home_angles = init_angles.copy()
         self.joint_angles = init_angles.copy()
         self.joint_coordinates = [[0.0, 0.0, 0.0], [], [], [], [], []] # default mm
         self.joint_coordinates_m = [[0.0, 0.0, 0.0], [], [], [], [], []] # non default m
@@ -43,23 +44,23 @@ class ARM_5DOF:
         horz = wrist_len * m.cos(theta4)
         x4 = x - horz * m.cos(theta1)
         y4 = y - horz * m.sin(theta1)
-        z4 = z - wrist_len * m.sin(theta4) - l1   # subtract vertical base offset z
+        z4 = z - wrist_len * m.sin(theta4) - l1
 
         # distance from shoulder to wrist
-        r2 = x4*x4 + y4*y4 + z4*z4
+        r = x4*x4 + y4*y4 + z4*z4
 
-        # law of cosines for theta2
-        cos_phi = (r2 - l2**2 - l3**2) / (2 * l2 * l3)
-        cos_phi = max(-1.0, min(1.0, cos_phi))  # clamp into [-1,1]
-        theta2 = -m.acos(cos_phi)
+        # elbow
+        cos_phi = (r - l2**2 - l3**2) / (2 * l2 * l3)
+        theta3 = -m.acos(cos_phi)
 
-        # shoulder elevation for theta3
-        beta  = m.atan2(z4, m.sqrt(x4*x4 + y4*y4))
-        gamma = m.atan2(
-            l3 * m.sin(-theta2),
-            l2 + l3 * m.cos(-theta2)
-        )
-        theta3 = beta + gamma
+        # shoulder
+        theta2 = m.asin(z4 / m.sqrt(r)) + m.atan(l3 * m.sin(theta3) / (l2 + l3 * m.cos(theta3)))
+
+        # apply offsets to theta4 as it is provided in world frame
+        # NOT last link frame, and FK expects last link frame
+        j4_offset = theta2 + theta3 
+        theta4 -= j4_offset
+        
 
         return [theta1, theta2, theta3, theta4, theta5]
     
@@ -94,11 +95,11 @@ class ARM_5DOF:
 
         # set 'theta' field of dh matrix
         self.dh_params["theta"] = joint_angles
-        joint_coordinates = []
+        joint_coordinates = [[0.0, 0.0, 0.0], [], [], [], [], []] # default mm
         
         # generate tf matrices
         product = self.tfMatrix(0)
-        joint_coordinates[1] = self.extractCoordinaates(product)
+        joint_coordinates[1] = self.extractCoordinates(product)
         for i in range(1, 5):
             product = np.matmul(product, self.tfMatrix(i))
             joint_coordinates[i+1] = self.extractCoordinates(product) 
