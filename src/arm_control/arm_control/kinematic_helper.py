@@ -6,6 +6,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 
+from itertools import product
+
 from .chessarm_colors import COLOR_RGB, pickRandomColor
 
 np.set_printoptions(suppress=True, precision=2)
@@ -29,40 +31,6 @@ class ARM_5DOF:
         self.dh_params["alpha"] = [m.pi/2, 0.0, 0.0, m.pi/2, 0.0]
         self.dh_params["d"] = [joint_params[0], 0.0, 0.0, 0.0, joint_params[3] + joint_params[4]]
         self.dh_params["a"] = [0.0, joint_params[1], joint_params[2], 0.0, 0.0]
-
-    
-    def solveIK(self, target_pose):
-        # unpack inputs for clarity
-        x, y, z, theta4, theta5 = target_pose
-        l1, l2, l3, l4, l5 = self.joint_params
-
-        # base yaw
-        theta1 = m.atan2(y, x)
-
-        # effective wrist offset
-        wrist_len = l4 + l5
-        horz = wrist_len * m.cos(theta4)
-        x4 = x - horz * m.cos(theta1)
-        y4 = y - horz * m.sin(theta1)
-        z4 = z - wrist_len * m.sin(theta4) - l1
-
-        # distance from shoulder to wrist
-        r = x4*x4 + y4*y4 + z4*z4
-
-        # elbow
-        cos_phi = (r - l2**2 - l3**2) / (2 * l2 * l3)
-        theta3 = -m.acos(cos_phi)
-
-        # shoulder
-        theta2 = m.asin(z4 / m.sqrt(r)) + m.atan(l3 * m.sin(theta3) / (l2 + l3 * m.cos(theta3)))
-
-        # apply offsets to theta4 as it is provided in world frame
-        # NOT last link frame, and FK expects last link frame
-        j4_offset = theta2 + theta3 
-        theta4 -= j4_offset
-        
-
-        return [theta1, theta2, theta3, theta4, theta5]
     
 
     def printArrayPretty(self, array):
@@ -74,6 +42,11 @@ class ARM_5DOF:
         for row in matrix:
             print(' '.join(f"{val:6.2f}" for val in row))
         print("")
+
+
+    def extractCoordinates(self, tf_mat):
+        # extract x, y, z position of a particular joint given its T0i tf matrix      
+        return [tf_mat[0][3], tf_mat[1][3], tf_mat[2][3]]
     
 
     def tfMatrix(self, i):
@@ -106,45 +79,51 @@ class ARM_5DOF:
         
         #self.printMatrixPretty(self.joint_coordinates_m)
         return joint_coordinates
-
-
-    def computeJacobian(self, joint_angles, delta=1e-6):
-        J = np.zeros((3, 3))
-        f0 = self.solveFK(joint_angles)[4]
-        for i in range(3):
-            t = joint_angles.copy()
-            t[i] += delta
-            fi = self.solveFK(t)[4]
-            J[:, i] = (fi - f0) / delta
-        return J
-    
-
-    def gradientDescentIK(self, joint_angles, p_des, alpha=0.01, max_iter=1000, tol=1e-4):
         
-        pose = np.array(joint_angles[:3], dtype=float)
-
-        for i in range(max_iter):
-            p_cur = self.solveFK(pose)
-            p_cur = np.array(p_cur[4], dtype=float) # extract end effector xyz position (FK returns all joint positions)
-            error = p_cur - p_des
-            loss = m.sqrt(np.sum(error**2)) # euclidean distance
-            if loss < tol:
-                break
-
-            J = self.computeJacobian(pose)
-            gradient = 2 * J.T @ error
-            pose -= alpha * gradient
-            print(pose)
-
-        return pose
-            
-
-    def extractCoordinates(self, tf_mat):
-        # extract x, y, z position of a particular joint given its T0i tf matrix      
-        return [tf_mat[0][3], tf_mat[1][3], tf_mat[2][3]]
     
+    # geometric 5DOF inverse kinematics solver
+    # assumes that the target pose is in the form of [x, y, z, theta4, theta5]
+    # where theta4 is given WRT world horizonal frame (xy plane)
+    # example: wrist straight down would be theta4 = -90 degrees
+    def solveIK(self, target_pose):
+        # unpack inputs for clarity
+        x, y, z, theta4, theta5 = target_pose
+        l1, l2, l3, l4, l5 = self.joint_params
 
-    def extractCoordinates_m(self, tf_mat):
-        # extract x, y, z position of a particular joint given its T0i tf matrix      
-        return [tf_mat[0][3] / 1000.0, tf_mat[1][3] / 1000.0, tf_mat[2][3] / 1000.0]
+        # convert to radians
+        theta4 = m.radians(theta4)
+        theta5 = m.radians(theta5)
+
+        # base yaw
+        theta1 = m.atan2(y, x)
+
+        # effective wrist offset
+        wrist_len = l4 + l5
+        horz = wrist_len * m.cos(theta4)
+        x4 = x - horz * m.cos(theta1)
+        y4 = y - horz * m.sin(theta1)
+        z4 = z - wrist_len * m.sin(theta4) - l1
+
+        # distance from shoulder to wrist
+        rsquared = x4**2 + y4**2 + z4**2
+
+        # elbow
+        cos_phi = (rsquared - l2**2 - l3**2) / (2.0 * l2 * l3)
+        theta3 = m.acos(cos_phi)
+
+        # shoulder
+        alpha = m.asin(z4 / m.sqrt(rsquared))
+        beta = m.atan(l3 * m.sin(theta3) / (l2 + l3 * m.cos(theta3)))
+        theta2 = alpha + beta 
+
+        # flip elbow angle to match arm orientation
+        # AFTER it is used to calculate theta2
+        theta3 *= -1 
+
+        # apply offsets to theta4 as it is provided in world frame
+        # NOT last link frame, and FK expects last link frame
+        j4_offset = theta2 + theta3 
+        theta4 -= j4_offset - m.pi/2
+
+        return [theta1, theta2, theta3, theta4, theta5]
 

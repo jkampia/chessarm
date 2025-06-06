@@ -43,10 +43,13 @@ class UserInputHandler:
             x = float(list[1])
             y = float(list[2])
             z = float(list[3])
-            r = float(list[4]) if len(list) == 5 else 0.0
-            p = float(list[5]) if len(list) == 6 else 0.0
+            r = float(list[4]) 
+            p = float(list[5]) 
             self.robot.joint_angles = self.robot.solveIK([x, y, z, r, p])
             self.printListFormatted(self.robot.joint_angles)
+            test_fk = self.robot.solveFK(self.robot.joint_angles)
+            print(test_fk[4])
+            print(test_fk[5])
 
     
     def printListFormatted(self, list):
