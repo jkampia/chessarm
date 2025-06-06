@@ -1,5 +1,7 @@
 import math as m
 
+from .kinematic_helper import ARM_INFO
+
 class UserInputHandler:
 
 
@@ -37,7 +39,10 @@ class UserInputHandler:
             self.robot.joint_angles[joint] = new_angle
 
         elif list[0] == "ik":
-            if len(list) < 4 or len(list) > 6:
+            
+            self.robot.movement_type = ARM_INFO.JOINT_SPACE
+            
+            if len(list) != 6:
                 print("Invalid command. Usage: ik <x> <y> <z> <r> <p>")
                 return
             x = float(list[1])
@@ -50,6 +55,23 @@ class UserInputHandler:
             test_fk = self.robot.solveFK(self.robot.joint_angles)
             print(test_fk[4])
             print(test_fk[5])
+
+        elif list[0] == "line":
+
+            self.robot.movement_type = ARM_INFO.PATH_SPACE
+
+            if len(list) != 6:
+                print("Invalid command. Usage: line <x> <y> <z> <r> <p>")
+                return
+            x = float(list[1])
+            y = float(list[2])
+            z = float(list[3])
+            r = float(list[4]) 
+            p = float(list[5]) 
+            
+            self.robot.current_path_points, self.robot.current_path_angles = self.robot.linePath([x, y, z, r, p])
+            print(f'Generated path with {len(self.robot.current_path_points)} points.')
+
 
     
     def printListFormatted(self, list):

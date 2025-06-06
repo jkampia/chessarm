@@ -1,7 +1,9 @@
-# Helper class for calculating the forward and inverse kinematics of a 5dof robot arm geometrically
+# Helper class for inverse and forward kinematics, motion planning
 
 import math as m
 import numpy as np
+
+from enum import Enum
 
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -11,6 +13,12 @@ from itertools import product
 from .chessarm_colors import COLOR_RGB, pickRandomColor
 
 np.set_printoptions(suppress=True, precision=2)
+
+class ARM_INFO(Enum):
+
+    JOINT_SPACE = 0
+    PATH_SPACE = 1
+
 
 class ARM_5DOF:
 
@@ -26,6 +34,12 @@ class ARM_5DOF:
         self.joint_coordinates = [[0.0, 0.0, 0.0], [], [], [], [], []] # default mm
         self.joint_coordinates_m = [[0.0, 0.0, 0.0], [], [], [], [], []] # non default m
         self.joint_colors = [COLOR_RGB["red"], COLOR_RGB["green"], COLOR_RGB["blue"], COLOR_RGB["orange"], COLOR_RGB["purple"], COLOR_RGB["cyan"]]
+        self.current_path_points = []
+        self.current_path_angles = []
+        self.movement_type = ARM_INFO.JOINT_SPACE  # default movement type
+        self.path_resolution = 0.1  # default path resolution in mm
+        self.path_speed = 100  # default path speed in mm/s
+        self.update_delay = self.path_resolution / self.path_speed * 1000  # in milliseconds
 
         self.dh_params = {}
         self.dh_params["alpha"] = [m.pi/2, 0.0, 0.0, m.pi/2, 0.0]
@@ -126,4 +140,36 @@ class ARM_5DOF:
         theta4 -= j4_offset - m.pi/2
 
         return [theta1, theta2, theta3, theta4, theta5]
+    
 
+    def linePath(self, end):
+
+        current = np.array(self.joint_coordinates[5][:3])  # just (x, y, z)
+        end = np.array(end[:3])
+
+        # Compute total distance and number of steps
+        diff = end - current
+        dist = np.linalg.norm(diff)
+        steps = max(2, int(dist / self.path_resolution))
+
+        # Interpolate 
+        pos_path = [] # for storing positions
+        ang_path = [] # for storing joint angles to reach those positions
+        for i in range(steps + 1):
+            alpha = i / steps
+            interp_pos = current + alpha * diff
+            pos_path.append(interp_pos)
+            
+            # assume fixed theta4 & theta5
+            theta4, theta5 = self.joint_angles[3], self.joint_angles[4]
+
+            try:
+                ang_path.append(self.solveIK([*interp_pos, theta4, theta5]))
+            except Exception as e:
+                print(f"IK failed at step {i}/{steps}: {e}")
+                break  
+
+        return pos_path, ang_path
+
+
+    

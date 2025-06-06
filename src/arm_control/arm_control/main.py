@@ -19,7 +19,7 @@ from geometry_msgs.msg import PoseStamped
 import cv2
 from cv_bridge import CvBridge 
 
-from .kinematic_helper import ARM_5DOF
+from .kinematic_helper import ARM_5DOF, ARM_INFO
 
 import struct
 
@@ -36,7 +36,7 @@ class MainArmNode(Node):
 
         super().__init__('main_arm_node')
 
-        self.timer = self.create_timer(0.1, self.timerCallback) # start ros2 timer
+        self.timer = self.create_timer(0.001, self.timerCallback) # start ros2 timer
 
         self.user_command = 1 # initialize user_command to a non-None value
         self.user_input_thread = threading.Thread(target=self.userInputThread, daemon=True) # start separate user input thread
@@ -59,7 +59,7 @@ class MainArmNode(Node):
         # set user_command to None to start the user input loop
         self.user_command = None
 
-        self.animation_triggers = {} # set of timestamps to trigger animation frames
+        self.last_robot_update_time = self.currentTimeMilliseconds()
 
 
     def timerCallback(self):
@@ -68,10 +68,11 @@ class MainArmNode(Node):
             self.input_handler.parseUserInput(self.user_command)
             self.user_command = None
 
-        #self.processAnimationTriggers()
+        
         self.robot.joint_coordinates = self.robot.solveFK(self.robot.joint_angles)
-        self.robot.joint_coordinates_m = [[coord/1000 for coord in joint] for joint in self.robot.joint_coordinates]
+        self.robot.joint_coordinates_m = [[coord/1000.0 for coord in joint] for joint in self.robot.joint_coordinates]
         self.publishJointsToRviz()
+        self.last_robot_update_time = self.currentTimeMilliseconds()
 
 
     def userInputThread(self):
@@ -99,6 +100,22 @@ class MainArmNode(Node):
 
         self.joint_pub.publish(joint_msg)
         self.link_pub.publish(link_msg)
+
+
+    def updatePathMovement(self):
+
+        if self.robot.movement_type != ARM_5DOF.PATH_SPACE:
+            return
+
+        if not self.robot.current_path_points:
+            self.get_logger().info("No path points to process.")
+            return
+        
+        if self.currentTimeMilliseconds() - self.last_robot_update_time < self.robot.update_delay:
+            self.robot.joint_angles = self.robot.current_path_angles[0]
+            self.robot.current_path_angles.pop(0)
+            self.robot.current_path_points.pop(0)
+        
 
 
     def packRGB(self, r, g, b):
