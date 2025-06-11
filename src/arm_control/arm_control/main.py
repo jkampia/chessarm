@@ -36,14 +36,17 @@ class MainArmNode(Node):
 
         super().__init__('main_arm_node')
 
-        self.timer = self.create_timer(0.001, self.timerCallback) # start ros2 timer
+        self.delay_ms = 50
+        self.delay_s = self.delay_ms / 1000.0
+        self.timer = self.create_timer(self.delay_s, self.timerCallback) # start ros2 timer
 
         self.user_command = 1 # initialize user_command to a non-None value
         self.user_input_thread = threading.Thread(target=self.userInputThread, daemon=True) # start separate user input thread
         self.user_input_thread.start()
 
+        joint_params = [200, 400, 400, 100, 100] # limb lengths in mm
         home_angles = [0.0, m.pi/2, 0.0, 0.0, 0.0] # home angles for each joint
-        self.robot = ARM_5DOF([200, 400, 400, 100, 100], home_angles) # init robot
+        self.robot = ARM_5DOF(joint_params, home_angles) # init robot
         self.input_handler = UserInputHandler(self.robot) # init user input handler
 
         # ros2 pubs and subs
@@ -59,8 +62,6 @@ class MainArmNode(Node):
         # set user_command to None to start the user input loop
         self.user_command = None
 
-        self.last_robot_update_time = self.currentTimeMilliseconds()
-
 
     def timerCallback(self):
 
@@ -68,11 +69,10 @@ class MainArmNode(Node):
             self.input_handler.parseUserInput(self.user_command)
             self.user_command = None
 
-        
+        self.updatePathMovement()
         self.robot.joint_coordinates = self.robot.solveFK(self.robot.joint_angles)
         self.robot.joint_coordinates_m = [[coord/1000.0 for coord in joint] for joint in self.robot.joint_coordinates]
         self.publishJointsToRviz()
-        self.last_robot_update_time = self.currentTimeMilliseconds()
 
 
     def userInputThread(self):
@@ -104,18 +104,16 @@ class MainArmNode(Node):
 
     def updatePathMovement(self):
 
-        if self.robot.movement_type != ARM_5DOF.PATH_SPACE:
+        if self.robot.movement_type != ARM_INFO.PATH_SPACE:
             return
 
-        if not self.robot.current_path_points:
-            self.get_logger().info("No path points to process.")
+        if not self.robot.sliced_path_points:
+            self.robot.movement_type = ARM_INFO.JOINT_SPACE
             return
         
-        if self.currentTimeMilliseconds() - self.last_robot_update_time < self.robot.update_delay:
-            self.robot.joint_angles = self.robot.current_path_angles[0]
-            self.robot.current_path_angles.pop(0)
-            self.robot.current_path_points.pop(0)
-        
+        self.robot.joint_angles = self.robot.sliced_path_angles[0]
+        self.robot.sliced_path_angles.pop(0)
+        self.robot.sliced_path_points.pop(0)
 
 
     def packRGB(self, r, g, b):
@@ -176,26 +174,7 @@ class MainArmNode(Node):
 
     def currentTimeMilliseconds(self):
         return int(round(time.time() * 1000))
-
-
-    # generate animation 'frames' struct of: [time, [joint_angles]]
-    def generateAnimationFrames(self, init_angles, target_angles, fps=10, move_time=1.0):
-        num_steps = int(move_time * fps)
-        frames = []
-        for i in range(num_steps):
-            angles = [(1 - i / num_steps) * init + (i / num_steps) * target for init, target in zip(init_angles, target_angles)]
-            frames.append((self.currentTimeMilliseconds() + i * int(1000/fps), angles))
-        return frames
     
-
-    def processAnimationTriggers(self):
-        for key, frames in self.animation_triggers.items():
-            if frames is None:
-                continue
-            elif key == "fk" and self.currentTimeMilliseconds() > frames[0][0]:
-                self.robot.joint_angles = frames[0][1]
-                frames.pop(0) # pop the frame that was just processed
-
 
 
 def main(args=None):

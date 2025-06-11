@@ -34,11 +34,16 @@ class ARM_5DOF:
         self.joint_coordinates = [[0.0, 0.0, 0.0], [], [], [], [], []] # default mm
         self.joint_coordinates_m = [[0.0, 0.0, 0.0], [], [], [], [], []] # non default m
         self.joint_colors = [COLOR_RGB["red"], COLOR_RGB["green"], COLOR_RGB["blue"], COLOR_RGB["orange"], COLOR_RGB["purple"], COLOR_RGB["cyan"]]
-        self.current_path_points = []
-        self.current_path_angles = []
+        
+        self.path_points = []
+        self.sliced_path_points = []
+        self.path_angles = []
+        self.sliced_path_angles = []
+
         self.movement_type = ARM_INFO.JOINT_SPACE  # default movement type
+        
         self.path_resolution = 0.1  # default path resolution in mm
-        self.path_speed = 100  # default path speed in mm/s
+        self.path_speed = 300  # default path speed in mm/s
         self.update_delay = self.path_resolution / self.path_speed * 1000  # in milliseconds
 
         self.dh_params = {}
@@ -146,6 +151,7 @@ class ARM_5DOF:
 
         current = np.array(self.joint_coordinates[5][:3])  # just (x, y, z)
         end = np.array(end[:3])
+        print(current, end)
 
         # Compute total distance and number of steps
         diff = end - current
@@ -170,6 +176,20 @@ class ARM_5DOF:
                 break  
 
         return pos_path, ang_path
+    
+
+    # slice path into lower resolution for display purposes
+    def slicePath(self, pos_path, ang_path, n):
+
+        sliced_pos_path = pos_path[::n]
+        sliced_ang_path = ang_path[::n]
+        if not np.array_equal(pos_path[-1], sliced_pos_path[-1]):
+            sliced_pos_path.append(pos_path[-1])
+        if not np.array_equal(ang_path[-1], sliced_ang_path[-1]):
+            sliced_ang_path.append(ang_path[-1])
+        return sliced_pos_path, sliced_ang_path
+
+
 
 
     

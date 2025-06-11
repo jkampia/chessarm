@@ -14,7 +14,23 @@ class UserInputHandler:
                 "print - print robot end effector position",
                 "ik - Move to an x,y,z,r,p position in space",
                 "fk - Enter a joint angle in radians"]
-    
+        
+
+    def generateMovement(self, goal_pose):
+
+        x, y, z, r, p = goal_pose
+
+        if self.robot.movement_type == ARM_INFO.JOINT_SPACE:
+            self.robot.joint_angles = self.robot.solveIK([x, y, z, r, p])
+            self.printListFormatted(self.robot.joint_angles)
+            test_fk = self.robot.solveFK(self.robot.joint_angles)
+
+        elif self.robot.movement_type == ARM_INFO.PATH_SPACE:
+            update_delay = 50 #ms
+            n = int(self.robot.path_speed/1000.0 / self.robot.path_resolution * update_delay) # number of points to skip for animation
+            self.robot.path_points, self.robot.path_angles = self.robot.linePath([x, y, z, r, p])
+            self.robot.sliced_path_points, self.robot.sliced_path_angles = self.robot.slicePath(self.robot.path_points, self.robot.path_angles, n)
+            print(f'Generated path with {len(self.robot.sliced_path_points)} points.')
 
     def parseUserInput(self, user_input):
 
@@ -45,16 +61,9 @@ class UserInputHandler:
             if len(list) != 6:
                 print("Invalid command. Usage: ik <x> <y> <z> <r> <p>")
                 return
-            x = float(list[1])
-            y = float(list[2])
-            z = float(list[3])
-            r = float(list[4]) 
-            p = float(list[5]) 
-            self.robot.joint_angles = self.robot.solveIK([x, y, z, r, p])
-            self.printListFormatted(self.robot.joint_angles)
-            test_fk = self.robot.solveFK(self.robot.joint_angles)
-            print(test_fk[4])
-            print(test_fk[5])
+            
+            list = [float(x) for x in list[1:]]
+            self.generateMovement(list)    
 
         elif list[0] == "line":
 
@@ -63,14 +72,13 @@ class UserInputHandler:
             if len(list) != 6:
                 print("Invalid command. Usage: line <x> <y> <z> <r> <p>")
                 return
-            x = float(list[1])
-            y = float(list[2])
-            z = float(list[3])
-            r = float(list[4]) 
-            p = float(list[5]) 
             
-            self.robot.current_path_points, self.robot.current_path_angles = self.robot.linePath([x, y, z, r, p])
-            print(f'Generated path with {len(self.robot.current_path_points)} points.')
+            list = [float(x) for x in list[1:]]
+            self.generateMovement(list)  
+            
+            
+
+
 
 
     
