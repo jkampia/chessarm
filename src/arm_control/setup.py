@@ -20,7 +20,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'main = arm_control.main:main'
+            'main = arm_control.main:main',
+            'visiontest = arm_control.chessarm_vision:main'
         ],
     },
 )
