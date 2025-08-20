@@ -3,6 +3,14 @@ build/
 install/
 log/
 
+# training data (images)
+training_data/black/*
+training_data/white/*
+training_data/empty/*
+training_data/aug_data/black/*
+training_data/aug_data/white/*
+training_data/aug_data/empty/*
+
 # Python cache
 __pycache__/
 *.pyc
