@@ -30,6 +30,12 @@ class CastlingRights(Enum):
     NONE = 3
 
 
+class MoveType(Enum):
+    NORMAL = 0,
+    EN_PASSANT = 1,
+    CASTLE = 2,
+
+
 
 StartingPieceOrder = {
     1: [PieceType.ROOK, PieceType.KNIGHT, PieceType.BISHOP, PieceType.QUEEN, PieceType.KING, PieceType.BISHOP, PieceType.KNIGHT, PieceType.ROOK],
@@ -43,6 +49,7 @@ StartingPieceOrder = {
 }
 
 
+
 StartingRowOccupancy = {
     1: Occupancy.BLACK,
     2: Occupancy.BLACK,
@@ -53,6 +60,7 @@ StartingRowOccupancy = {
     7: Occupancy.WHITE,
     8: Occupancy.WHITE,
 }
+
 
 
 FENSymbols = {
@@ -86,6 +94,7 @@ class ChessSquare:
 
 class ChessBoard:
 
+
     def __init__(self, playing_as):
         
         self.current_state = [[ChessSquare() for col in range(8)] for row in range(8)]
@@ -97,10 +106,12 @@ class ChessBoard:
         self.playing_as = playing_as
         self.white_can_castle = CastlingRights.BOTH
         self.black_can_castle = CastlingRights.BOTH
-        self.turn_counter = 0
         self.en_passant_targets = [] #contains list of coordinates (i, j) 
         self.halfmove_clock = 0
         self.fullmoves = 0
+
+        self.injectTestCase()
+
         
 
     def setupInitialBoard(self, robot_color):
@@ -110,9 +121,11 @@ class ChessBoard:
                 self.current_state[i][j].piece_type = StartingPieceOrder[i+1][j]
 
 
+
     def snapshot(self):
         # make a full, independent copy of the board state
         self.prev_state = copy.deepcopy(self.current_state)
+
 
     
     def rotate_board_180(self):
@@ -125,6 +138,7 @@ class ChessBoard:
         self.current_state = rot(self.current_state)
     
 
+
     def matrixSquareToStandardNotation(self, tuple):
         """
         Converts square in matrix notation (i, j) to standard 
@@ -135,6 +149,7 @@ class ChessBoard:
         return f"{horiz_list[tuple[0]]}{vert_list[tuple[1]]}"
     
 
+
     def standardNotationToMatrixSquare(self, move):
         """
         Converts position in standard notation (e4) to 
@@ -144,46 +159,48 @@ class ChessBoard:
             print("something wrong happened")
         horiz_dict = {'a': 0, 'b': 1, 'c': 2, 'd': 3, 'e': 4, 'f': 5, 'g': 6, 'h': 7}
         vert_dict = {'8': 0, '7': 1, '6': 2, '5': 3, '4': 4, '3': 5, '2': 6, '1': 7}
-        return (horiz_dict[move[0]], vert_dict[move[1]])
-    
+        return (vert_dict[move[1]], horiz_dict[move[0]])
+
+
 
     def stockfishMoveToMatrixMove(self, move):
+        """
+        Accepts standard move input of length 4 (i.e. e4d4)
+        Converts it to matrix index notation, returns as list
+        [(i1, j1), (i2, j2)]
+        """
         tuple1 = self.standardNotationToMatrixSquare(move[0:2])
         tuple2 = self.standardNotationToMatrixSquare(move[2:4])
         return [tuple1, tuple2]
 
 
-    def compareCurrentToPreviousOccupancy(self):
-        """
-        Look through current state vs prev state and log indices (positions)
-        where OCCUPANCY has changed
-        """
-        occupancy_change_list = []
-        for i in range(8):
-            for j in range(8):
-                if self.current_state[i][j].occupancy != self.prev_state[i][j].occupancy:
-                    occupancy_change_list.append((i, j)) #append tuple containing row and col of changed space
-        if len(occupancy_change_list) != 2:
-            print("somethign weird is happening")
-        return occupancy_change_list
-
     
-    def simulateMove(self, pos1, pos2):
+    def simulateMoves(self, moves):
         """
         Move piece from pos1 to pos2 where pos1 and pos2 are tuples (row, col)
+        Must pass moves in as a list, even if it is a single move
         """
         self.snapshot() #save current board state before making changes
 
-        i1, j1 = pos1 #unpack
-        i2, j2 = pos2
-    
-        moved_square_occupancy = self.current_state[i1][j1].occupancy
-        
-        self.current_state[i2][j2].piece_type = PieceType.UNKNOWN #dont update this as robot wouldnt know this in real life
-        self.current_state[i2][j2].occupancy = moved_square_occupancy
+        for move in moves:
 
-        self.current_state[i1][j1].piece_type = None #clear out old square
-        self.current_state[i1][j1].occupancy = Occupancy.EMPTY
+            if isinstance(move, str):
+                move = self.stockfishMoveToMatrixMove(move)
+                print(move)
+
+            i1, j1 = move[0] #unpack
+            i2, j2 = move[1]
+        
+            moved_square_occupancy = self.current_state[i1][j1].occupancy
+            
+            self.current_state[i2][j2].piece_type = PieceType.UNKNOWN #dont update this as robot wouldnt know this in real life
+            self.current_state[i2][j2].occupancy = moved_square_occupancy
+
+            self.current_state[i1][j1].piece_type = None #clear out old square
+            self.current_state[i1][j1].occupancy = Occupancy.EMPTY
+
+            self.fullmoves += 1 # inc move counter for FEN notation
+
 
 
     def toFEN(self, state):
@@ -234,6 +251,7 @@ class ChessBoard:
         return fenstring
     
 
+
     def countPieces(self, state):
         """
         Count pieces on board state
@@ -245,20 +263,86 @@ class ChessBoard:
         return piece_count
     
 
-    def findWhichIndexIsEmpty(self, idx_list):
-        if len(idx_list) != 2:
-            print("weird stuff happenin")
+
+    def findWhichIndicesAreEmpty(self, idx_list):
+        if len(idx_list) == 0:
+            print(f'findWhichIndicesAreEmpty() was passed a list of length 0. This is wrong')
+            return
+            
         """
         each idx is a tuple
         expecting length 2, only 1 can be empty so return it
         """
+        empty_indices = []
+        occupied_indices = []
         for idx in idx_list:
             if self.current_state[idx[0]][idx[1]].piece_type is None:
-                empty = idx
+                empty_indices.append(idx)
             else:
-                not_empty = idx
+                occupied_indices.append(idx)
 
-        return empty, not_empty
+        return empty_indices, occupied_indices
+    
+
+
+    def compareCurrentToPreviousOccupancy(self):
+        """
+        Look through current state vs prev state and log indices (positions)
+        where OCCUPANCY has changed
+        """
+        occupancy_change_list = []
+        for i in range(8):
+            for j in range(8):
+                if self.current_state[i][j].occupancy != self.prev_state[i][j].occupancy:
+                    occupancy_change_list.append((i, j)) #append tuple containing row and col of changed space
+        return occupancy_change_list
+    
+
+
+    def detectCastle(self, occupancy_change_list):
+        """
+        Returns true if castling just occurred
+        """
+        moved_pieces = [self.prev_state[tup[0]][tup[1]].piece_type for tup in occupancy_change_list]
+        if PieceType.KING in moved_pieces and PieceType.ROOK in moved_pieces and len(occupancy_change_list) == 4: 
+            # if both the king and rook were moved at once, and two squares were left empty, it has to be a castle
+            return True
+        else:
+            return False
+        
+
+    def determineCastleTypeAndUpdateState(self, occupancy_change_list):
+        moved_colors = [self.prev_state[tup[0]][tup[1]].occupancy for tup in occupancy_change_list]
+        print(moved_colors)
+        if Occupancy.BLACK in moved_colors and Occupancy.WHITE in moved_colors:
+            print('Error: black and white pieces should not be involved in one castle move!')
+        elif Occupancy.WHITE in moved_colors: # white castled
+            if (7, 0) in occupancy_change_list and (7, 4) in occupancy_change_list: # left rook was involved
+                self.current_state[7][0].piece_type = None
+                self.current_state[7][0].occupancy = Occupancy.EMPTY
+                self.current_state[7][2].piece_type = PieceType.KING
+                self.current_state[7][2].occupancy = Occupancy.WHITE
+                self.current_state[7][3].piece_type = PieceType.ROOK
+                self.current_state[7][3].occupancy = Occupancy.WHITE
+                self.current_state[7][4].piece_type = None
+                self.current_state[7][4].occupancy = Occupancy.EMPTY
+            elif (7, 7) in occupancy_change_list and (7, 4) in occupancy_change_list: # right rook was involved
+                self.current_state[7][4].piece_type = None
+                self.current_state[7][4].occupancy = Occupancy.EMPTY
+                self.current_state[7][5].piece_type = PieceType.ROOK
+                self.current_state[7][5].occupancy = Occupancy.WHITE
+                self.current_state[7][6].piece_type = PieceType.KING
+                self.current_state[7][6].occupancy = Occupancy.WHITE
+                self.current_state[7][7].piece_type = None
+                self.current_state[7][7].occupancy = Occupancy.EMPTY
+            else:
+                print(f'Error: Apparently no white rook was involved in castling')
+        
+ 
+
+    def detectEnPassant(self, occupancy_change_list):
+        return False
+
 
 
     def analyzeOccupancyChanges(self):
@@ -267,15 +351,38 @@ class ChessBoard:
         This is what the robot has to do in real life
         """
         occupancy_change_list = self.compareCurrentToPreviousOccupancy()
-        print(occupancy_change_list)
+        if len(occupancy_change_list) == 0:
+            print(f'Detected 0 occupancy changes! Something is probably wrong.')
+            return
         
-        empty_idx, non_empty_idx = self.findWhichIndexIsEmpty(occupancy_change_list) #find which space a piece was moved from
-        piece_that_was_moved = self.prev_state[empty_idx[0]][empty_idx[1]]
-        
+        """
+        There are several cases for occupancy changes
+        case 1: 2 occupancy changes, means regular piece move or regular take
+        case 2: 3 occupancy changes, can mean en passant or error
+        case 3: 4 occupancy changes, can mean castle or error
+        case 4: >4 occupancy changes, must be error by board detector
+        """
+
+
+        if self.detectCastle(occupancy_change_list):
+            print("castle detected")
+            self.determineCastleTypeAndUpdateState(occupancy_change_list)
+            
+
+
+
+
+        """
+        empty_idx, non_empty_idx = self.findWhichIndicesAreEmpty(occupancy_change_list) #find which space a piece was moved from
+        pieces_that_were_moved = []
+        for idx in empty_idx:
+            pieces_that_were_moved.append()
+
         print(piece_that_was_moved.piece_type)
         print(piece_that_was_moved.occupancy)
 
         self.current_state[non_empty_idx[0]][non_empty_idx[1]] = piece_that_was_moved #update
+        """
 
         """
         Populate the rest of the board using previous board state
@@ -288,17 +395,22 @@ class ChessBoard:
                 else:
                     print(f'Skipping index ({i}, {j}) for boardstate copy')
 
+    
 
-    def stockfishNotationToTupleIndex(self):
-        """
-        Takes move in stockfish notation (i.e. e4d4) and converts it to tuple index format [(i1, j1), (i2, j2)]
-        """
-        pass
+    
+
+    def injectTestCase(self):
+        print("Injecting test case.")
+        empty_indices = [(7,1), (7,2), (7,3), (7,5), (7,6)]
+        for idx in empty_indices:
+            self.current_state[idx[0]][idx[1]].piece_type = None
+            self.current_state[idx[0]][idx[1]].occupancy = Occupancy.EMPTY
 
 
 
 board = ChessBoard(playing_as="white")
 
+"""
 fen = board.toFEN(board.current_state)
 if board.stockfish.is_fen_valid(fen):
     board.stockfish.set_fen_position(fen)
@@ -306,9 +418,9 @@ if board.stockfish.is_fen_valid(fen):
     print(move)
 else:
     print(f"Invalid fen string: {fen}")
+"""
 
-matrix_move = board.stockfishMoveToMatrixMove(move)
-board.simulateMove(matrix_move[0], matrix_move[1])
+#board.simulateMoves(["e1c1", "a1d1"])
 board.analyzeOccupancyChanges()
 
 
