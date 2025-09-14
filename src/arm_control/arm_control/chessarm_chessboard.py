@@ -23,11 +23,11 @@ class PieceType(IntEnum):
     UNKNOWN = 6
 
 
-class CastlingRights(Enum):
-    BOTH = 0
-    KINGSIDE = 1
-    QUEENSIDE = 2
-    NONE = 3
+class CastlingRights(IntEnum):
+    BOTH = 3
+    KINGSIDE = 2
+    QUEENSIDE = 1
+    NONE = 0
 
 
 class MoveType(Enum):
@@ -297,6 +297,29 @@ class ChessBoard:
                     occupancy_change_list.append((i, j)) #append tuple containing row and col of changed space
         return occupancy_change_list
     
+    
+
+    def determineIfCastlingRightsChanged(self, occupancy_change_list):
+        """
+        Checks occupancy list to see if a king or rook was moved off its original tile
+        Refer to CastlingRights enum for reference on why these particular values are being subtracted
+        original_rook_squares = [(0, 0), (0, 7), (7, 0), (7, 7)] # 4 board corners
+        original_king_squares = [(0, 4), (7, 4)]
+        """
+        for tup in occupancy_change_list:
+            if tup == (0, 0): # black queenside rook
+                self.black_can_castle = CastlingRights(self.black_can_castle - 1)
+            elif tup == (0, 7): # black kingside rook
+                self.black_can_castle = CastlingRights(self.black_can_castle - 2)
+            elif tup == (7, 0): # white queenside rook
+                self.white_can_castle = CastlingRights(self.white_can_castle - 1)
+            elif tup == (7, 7): # white kingside rook
+                self.white_can_castle = CastlingRights(self.white_can_castle - 2)
+            elif tup == (0, 4): # black king was moved
+                self.black_can_castle = CastlingRights.NONE
+            elif tup == (7, 4):
+                self.white_can_castle = CastlingRights.NONE
+    
 
 
     def detectCastle(self, occupancy_change_list):
@@ -314,10 +337,14 @@ class ChessBoard:
     def determineCastleTypeAndUpdateState(self, occupancy_change_list):
         moved_colors = [self.prev_state[tup[0]][tup[1]].occupancy for tup in occupancy_change_list]
         print(moved_colors)
+        
         if Occupancy.BLACK in moved_colors and Occupancy.WHITE in moved_colors:
             print('Error: black and white pieces should not be involved in one castle move!')
+        
         elif Occupancy.WHITE in moved_colors: # white castled
             if (7, 0) in occupancy_change_list and (7, 4) in occupancy_change_list: # left rook was involved
+                if self.white_can_castle != CastlingRights.BOTH and self.white_can_castle != CastlingRights.QUEENSIDE:
+                    print(f'White has no right to castle queenside in this position!')
                 self.current_state[7][0].piece_type = None
                 self.current_state[7][0].occupancy = Occupancy.EMPTY
                 self.current_state[7][2].piece_type = PieceType.KING
@@ -327,6 +354,8 @@ class ChessBoard:
                 self.current_state[7][4].piece_type = None
                 self.current_state[7][4].occupancy = Occupancy.EMPTY
             elif (7, 7) in occupancy_change_list and (7, 4) in occupancy_change_list: # right rook was involved
+                if self.white_can_castle != CastlingRights.BOTH or self.white_can_castle != CastlingRights.KINGSIDE:
+                    print(f'White has no right to castle kingside in this position!')
                 self.current_state[7][4].piece_type = None
                 self.current_state[7][4].occupancy = Occupancy.EMPTY
                 self.current_state[7][5].piece_type = PieceType.ROOK
@@ -338,6 +367,32 @@ class ChessBoard:
             else:
                 print(f'Error: Apparently no white rook was involved in castling')
         
+        elif Occupancy.BLACK in moved_colors: # black castled
+            if (0, 0) in occupancy_change_list and (0, 4) in occupancy_change_list:
+                if self.black_can_castle != CastlingRights.BOTH and self.black_can_castle != CastlingRights.QUEENSIDE:
+                    print(f'Black has no right to castle queenside in this position!')
+                self.current_state[0][0].piece_type = None
+                self.current_state[0][0].occupancy = Occupancy.EMPTY
+                self.current_state[0][2].piece_type = PieceType.KING
+                self.current_state[0][2].occupancy = Occupancy.WHITE
+                self.current_state[0][3].piece_type = PieceType.ROOK
+                self.current_state[0][3].occupancy = Occupancy.WHITE
+                self.current_state[0][4].piece_type = None
+                self.current_state[0][4].occupancy = Occupancy.EMPTY
+            elif (0, 7) in occupancy_change_list and (0, 4) in occupancy_change_list:
+                if self.black_can_castle != CastlingRights.BOTH and self.black_can_castle != CastlingRights.QUEENSIDE:
+                    print(f'Black has no right to castle kingside in this position!')
+                self.current_state[0][4].piece_type = None
+                self.current_state[0][4].occupancy = Occupancy.EMPTY
+                self.current_state[0][5].piece_type = PieceType.ROOK
+                self.current_state[0][5].occupancy = Occupancy.WHITE
+                self.current_state[0][6].piece_type = PieceType.KING
+                self.current_state[0][6].occupancy = Occupancy.WHITE
+                self.current_state[0][7].piece_type = None
+                self.current_state[0][7].occupancy = Occupancy.EMPTY
+
+        else:
+            print('determineCastleTypeAndUpdateState(): all occupancies returned EMPTY somehow')
  
 
     def detectEnPassant(self, occupancy_change_list):
@@ -420,7 +475,8 @@ else:
     print(f"Invalid fen string: {fen}")
 """
 
-#board.simulateMoves(["e1c1", "a1d1"])
+#
+board.simulateMoves(["e8c8", "a8d8"])
 board.analyzeOccupancyChanges()
 
 
